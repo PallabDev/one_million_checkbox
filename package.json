@@ -1,10 +1,10 @@
 {
-  "name": "one_million_checkbox",
+  "name": "f_h_checkbox",
   "version": "1.0.0",
-  "description": "",
+  "description": "500 checkbox controls over socket connections",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
   "keywords": [],
   "author": "",
