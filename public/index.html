@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>One Million Checkboxes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f7f4ec;
+            --surface: #fffdf8;
+            --ink: #1f1d1a;
+            --accent: #d96c3d;
+            --line: rgba(31, 29, 26, 0.08);
+            --shadow: 0 18px 40px rgba(59, 45, 29, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Space Grotesk", "Segoe UI", sans-serif;
+            color: var(--ink);
+            background: linear-gradient(180deg, #f8f4eb 0%, #f2ede2 100%);
+            padding: 32px 18px 48px;
+        }
+
+        .shell {
+            width: min(960px, 100%);
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 22px;
+            font-family: "DM Serif Display", Georgia, serif;
+            font-size: clamp(2.4rem, 5vw, 4rem);
+            line-height: 1;
+            letter-spacing: -0.04em;
+            text-align: center;
+        }
+
+        p {
+            width: fit-content;
+            margin: 0 auto 24px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            background: rgba(217, 108, 61, 0.08);
+            border: 1px solid rgba(217, 108, 61, 0.16);
+            color: #7b4b33;
+            font-size: 0.95rem;
+            font-weight: 500;
+            letter-spacing: 0.01em;
+            text-align: center;
+        }
+
+        #container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(28px, 32px));
+            justify-content: center;
+            gap: 12px;
+            padding: 22px;
+            border-radius: 22px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+            min-height: 320px;
+            align-content: start;
+        }
+
+        #container input[type="checkbox"] {
+            appearance: none;
+            width: 28px;
+            height: 28px;
+            margin: 0;
+            border-radius: 9px;
+            border: 1.5px solid rgba(31, 29, 26, 0.16);
+            background: #fffdf8;
+            cursor: pointer;
+            position: relative;
+            transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+        }
+
+        #container input[type="checkbox"]:hover {
+            transform: translateY(-1px);
+            border-color: rgba(217, 108, 61, 0.5);
+            box-shadow: 0 8px 16px rgba(217, 108, 61, 0.12);
+        }
+
+        #container input[type="checkbox"]:checked {
+            background: var(--accent);
+            border-color: var(--accent);
+            box-shadow: 0 10px 18px rgba(217, 108, 61, 0.22);
+        }
+
+        #container input[type="checkbox"]:checked::after {
+            content: "";
+            position: absolute;
+            left: 9px;
+            top: 5px;
+            width: 6px;
+            height: 11px;
+            border: solid #fff;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        @media (max-width: 860px) {
+            body {
+                padding-top: 24px;
+            }
+        }
+
+        .toast {
+            position: fixed;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%) translateY(20px);
+            max-width: min(420px, calc(100vw - 32px));
+            padding: 12px 16px;
+            border-radius: 14px;
+            background: rgba(31, 29, 26, 0.94);
+            color: #fffdf8;
+            box-shadow: 0 18px 40px rgba(31, 29, 26, 0.22);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 180ms ease, transform 180ms ease;
+            font-size: 0.95rem;
+            text-align: center;
+        }
+
+        .toast.is-visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <h1>Checkboxes</h1>
+        <p>500 Socket connection.</p>
+        <div id="container">
+        </div>
+    </main>
+    <div id="toast" class="toast" role="alert" aria-live="polite"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const container=document.getElementById('container');
+        const toast=document.getElementById('toast');
+        const socket=io();
+        const CHECKBOX_COUNT=500;
+        let toastTimeout;
+
+        function showToast(message){
+            toast.textContent=message;
+            toast.classList.add('is-visible');
+            clearTimeout(toastTimeout);
+            toastTimeout=setTimeout(()=>{
+                toast.classList.remove('is-visible');
+            },3000);
+        }
+
+        new Array(CHECKBOX_COUNT).fill(null).forEach((_,index)=>{
+            const input=document.createElement('input');
+            input.id=`checkbox-${index}`;
+            input.type='checkbox';
+            input.addEventListener('change',(event)=>{
+                let checked=event.target.checked;
+                socket.emit("client:checkbox:change",{index,checked})
+            });
+            container.appendChild(input);
+        })
+        socket.on("server:checkbox:change",data=>{
+            document.querySelector(`#checkbox-${data.index}`).checked=data.checked;
+            console.log(data)
+        })
+        socket.on("server:checkbox:status",data=>{
+            data.forEach((_,index)=>{
+                document.querySelector(`#checkbox-${index}`).checked=data[index];
+            })
+        })
+
+        socket.on("server:error",error=>{
+            let checkbox=document.querySelector(`#checkbox-${error.data.index}`)
+            checkbox.checked=!error.data.checked;
+            showToast(error.message || "Something went wrong. Please try again.");
+        });
+
+    </script>
+</body>
+</html>
