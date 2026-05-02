@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <p id="status">Completing authentication...</p>
+</body>
+<script>
+    (async () => {
+        const status = document.getElementById("status");
+        const code = new URLSearchParams(window.location.search).get("code");
+
+        if (!code) {
+            status.textContent = "Missing authorization code.";
+            return;
+        }
+
+        try {
+            const tokenResponse = await fetch("https://auth.pallabdev.in/token", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    clientId: "52fcd42c-c6bb-458a-a7aa-2724760f9791",
+                    clientSecret: "46fd1f7c-7f07-43f7-9cc5-f74a2cd57a00",
+                    code,
+                    redirectUri: "http://localhost:8000/auth",
+                })
+            });
+            const tokenData = await tokenResponse.json();
+
+            if (!tokenResponse.ok || !tokenData?.data?.accessToken) {
+                throw new Error(tokenData?.message || "Unable to complete authentication.");
+            }
+
+            localStorage.setItem("accessToken", tokenData.data.accessToken);
+            window.location.href = "/home";
+        } catch (error) {
+            status.textContent = error.message || "Authentication failed.";
+        }
+    })();
+</script>
+
+</html>

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <h1>Login</h1>
+</body>
+<script>
+    (() => {
+        if (localStorage.getItem("accessToken")) {
+            window.location.href = "/home";
+        }
+        else {
+            window.location.href = "https://auth.pallabdev.in/user/login?client_id=52fcd42c-c6bb-458a-a7aa-2724760f9791&redirect_uri=http%3A%2F%2Flocalhost%3A8000%2Fauth";
+        }
+    })();
+</script>
+
+</html>

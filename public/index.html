@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>One Million Checkboxes</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --bg: #f7f4ec;
@@ -139,6 +142,7 @@
         }
     </style>
 </head>
+
 <body>
     <main class="shell">
         <h1>Checkboxes</h1>
@@ -150,47 +154,58 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const container=document.getElementById('container');
-        const toast=document.getElementById('toast');
-        const socket=io();
-        const CHECKBOX_COUNT=500;
-        let toastTimeout;
-
-        function showToast(message){
-            toast.textContent=message;
-            toast.classList.add('is-visible');
-            clearTimeout(toastTimeout);
-            toastTimeout=setTimeout(()=>{
-                toast.classList.remove('is-visible');
-            },3000);
+        const accessToken = localStorage.getItem("accessToken");
+        if (!accessToken) {
+            window.location.href = "/";
         }
 
-        new Array(CHECKBOX_COUNT).fill(null).forEach((_,index)=>{
-            const input=document.createElement('input');
-            input.id=`checkbox-${index}`;
-            input.type='checkbox';
-            input.addEventListener('change',(event)=>{
-                let checked=event.target.checked;
-                socket.emit("client:checkbox:change",{index,checked})
+        const container = document.getElementById('container');
+        const toast = document.getElementById('toast');
+        const socket = io();
+        const CHECKBOX_COUNT = 500;
+        let toastTimeout;
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('is-visible');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('is-visible');
+            }, 3000);
+        }
+
+        new Array(CHECKBOX_COUNT).fill(null).forEach((_, index) => {
+            const input = document.createElement('input');
+            input.id = `checkbox-${index}`;
+            input.type = 'checkbox';
+            input.addEventListener('change', (event) => {
+                let checked = event.target.checked;
+
+                socket.emit("client:checkbox:change", { index, checked, accessToken });
             });
             container.appendChild(input);
         })
-        socket.on("server:checkbox:change",data=>{
-            document.querySelector(`#checkbox-${data.index}`).checked=data.checked;
-            console.log(data)
+        socket.on("server:checkbox:change", data => {
+            document.querySelector(`#checkbox-${data.index}`).checked = data.checked;
+
         })
-        socket.on("server:checkbox:status",data=>{
-            data.forEach((_,index)=>{
-                document.querySelector(`#checkbox-${index}`).checked=data[index];
+
+        socket.on("server:checkbox:user", data => {
+            showToast(`${data.user} changed a checkbox.`);
+        })
+        socket.on("server:checkbox:status", data => {
+            data.forEach((_, index) => {
+                document.querySelector(`#checkbox-${index}`).checked = data[index];
             })
         })
 
-        socket.on("server:error",error=>{
-            let checkbox=document.querySelector(`#checkbox-${error.data.index}`)
-            checkbox.checked=!error.data.checked;
+        socket.on("server:error", error => {
+            let checkbox = document.querySelector(`#checkbox-${error.data.index}`)
+            checkbox.checked = !error.data.checked;
             showToast(error.message || "Something went wrong. Please try again.");
         });
 
     </script>
 </body>
+
 </html>
