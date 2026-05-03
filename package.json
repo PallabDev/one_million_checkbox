@@ -1,11 +1,11 @@
 {
   "name": "f_h_checkbox",
   "version": "1.0.0",
-  "description": "500 checkbox controls over socket connections",
+  "description": "Realtime collaborative checkbox board with auth, Redis, and Socket.IO",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node --env-file=.env index.js",
+    "dev": "node --watch --env-file=.env index.js"
   },
   "keywords": [],
   "author": "",

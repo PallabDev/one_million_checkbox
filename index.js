@@ -8,11 +8,12 @@ import { publisher, subscriber } from "./redis-connection.js"
 import { Server } from "socket.io"
 
 const AUTH_ORIGIN = process.env.AUTH_ORIGIN || "https://auth.pallabdev.in";
-const AUTH_CLIENT_ID = process.env.AUTH_CLIENT_ID || "52fcd42c-c6bb-458a-a7aa-2724760f9791";
-const AUTH_CLIENT_SECRET = process.env.AUTH_CLIENT_SECRET || "46fd1f7c-7f07-43f7-9cc5-f74a2cd57a00";
+const AUTH_CLIENT_ID = process.env.AUTH_CLIENT_ID || "";
+const AUTH_CLIENT_SECRET = process.env.AUTH_CLIENT_SECRET || "";
 const JWKS_URL = `${AUTH_ORIGIN}/certs`;
 const TOKEN_URL = `${AUTH_ORIGIN}/token`;
-const CHECKBOX_COUNT = 500;
+const CHECKBOX_COUNT = Number(process.env.CHECKBOX_COUNT || 500);
+const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 3000);
 const CHECKBOX_STATE_KEY = "checkbox:state";
 const CHECKBOX_CHANGE_CHANNEL = "checkbox:change";
 let cachedJwks = null;
@@ -138,7 +139,7 @@ async function main() {
             }
             let lastOperationTime = rateLimitingHashMap.get(validUser.id);
             if (lastOperationTime) {
-                if (lastOperationTime + 3000 > Date.now()) {
+                if (lastOperationTime + RATE_LIMIT_WINDOW_MS > Date.now()) {
                     socket.emit("server:error", { data, message: "You are doing that too much. Please wait a moment before trying again." });
                     return;
                 }
