@@ -2,6 +2,20 @@ services:
   valkey:
     image: valkey/valkey:latest
     container_name: valkey
+    expose:
+      - "6379"
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: checkbox_app
     ports:
-      - "6379:6379"
+      - "6798:6798"
+    depends_on:
+      - valkey
+    environment:
+      - PORT=6798
+      - REDIS_HOST=valkey
+      - REDIS_PORT=6379
+      - JWT_SECRET=super_secret_docker_key_change_me_in_prod_12345
     restart: unless-stopped

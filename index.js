@@ -2,86 +2,43 @@ import http from "node:http"
 import express from "express"
 import path from "node:path"
 import jwt from "jsonwebtoken"
-import { createPublicKey } from "node:crypto"
+import crypto from "node:crypto"
 import { publisher, subscriber } from "./redis-connection.js"
 
 import { Server } from "socket.io"
 
-const AUTH_ORIGIN = process.env.AUTH_ORIGIN || "https://auth.pallabdev.in";
-const AUTH_CLIENT_ID = process.env.AUTH_CLIENT_ID || "";
-const AUTH_CLIENT_SECRET = process.env.AUTH_CLIENT_SECRET || "";
-const JWKS_URL = `${AUTH_ORIGIN}/certs`;
-const TOKEN_URL = `${AUTH_ORIGIN}/token`;
+const JWT_SECRET = process.env.JWT_SECRET || "default-fallback-super-secret-key-12345";
 const CHECKBOX_COUNT = Number(process.env.CHECKBOX_COUNT || 500);
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 3000);
 const CHECKBOX_STATE_KEY = "checkbox:state";
 const CHECKBOX_CHANGE_CHANNEL = "checkbox:change";
-let cachedJwks = null;
-let cachedJwksExpiresAt = 0;
 
+function hashPassword(password) {
+    const salt = crypto.randomBytes(16).toString("hex");
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
+    return `${salt}:${hash}`;
+}
 
-async function getJwks() {
-    if (cachedJwks && cachedJwksExpiresAt > Date.now()) {
-        return cachedJwks;
-    }
-
-    const response = await fetch(JWKS_URL);
-    if (!response.ok) {
-        throw new Error(`Unable to fetch JWKS: ${response.status}`);
-    }
-    cachedJwks = await response.json();
-    cachedJwksExpiresAt = Date.now() + 5 * 60 * 1000;
-    return cachedJwks;
+function verifyPassword(password, storedPassword) {
+    const parts = storedPassword.split(":");
+    if (parts.length !== 2) return false;
+    const [salt, originalHash] = parts;
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
+    return hash === originalHash;
 }
 
 async function validateAccessToken(accessToken) {
     if (!accessToken || typeof accessToken !== "string") {
         throw new Error("Missing access token");
     }
-
-    const header = jwt.decode(accessToken, { complete: true })?.header;
-
-    if (header?.alg !== "RS256") {
-        throw new Error("Unsupported token algorithm");
-    }
-
-    const jwks = await getJwks();
-    const jwk = jwks?.keys?.find((key) =>
-        key.kty === "RSA" &&
-        key.use === "sig" &&
-        key.alg === "RS256" &&
-        (!header?.kid || key.kid === header.kid)
-    );
-
-    if (!jwk) {
-        throw new Error("Signing key not found");
-    }
-
-    return jwt.verify(accessToken, createPublicKey({ key: jwk, format: "jwk" }), {
-        algorithms: ["RS256"]
-    });
-}
-
-function getRedirectUri(req) {
-    return process.env.AUTH_REDIRECT_URI || `${req.protocol}://${req.get("host")}/auth`;
-}
-
-function getAuthCredentials() {
-    if (!AUTH_CLIENT_ID || !AUTH_CLIENT_SECRET) {
-        throw new Error("AUTH_CLIENT_ID and AUTH_CLIENT_SECRET must be set");
-    }
-
-    return {
-        clientId: AUTH_CLIENT_ID,
-        clientSecret: AUTH_CLIENT_SECRET
-    };
+    return jwt.verify(accessToken, JWT_SECRET);
 }
 
 async function main() {
     const app = express();
     const rateLimitingHashMap = new Map();
     const server = http.createServer(app);
-    const PORT = process.env.PORT || 8000;
+    const PORT = process.env.PORT || 6798;
     const serverId = `${process.pid}-${Date.now()}`;
     app.set("trust proxy", true);
     app.use(express.json());
@@ -166,55 +123,132 @@ async function main() {
         });
     });
 
-    app.get('/login', (req, res) => {
-        try {
-            const { clientId } = getAuthCredentials();
-            const loginUrl = new URL("/user/login", AUTH_ORIGIN);
-
-            loginUrl.searchParams.set("client_id", clientId);
-            loginUrl.searchParams.set("redirect_uri", getRedirectUri(req));
-            res.redirect(loginUrl.toString());
-        } catch (error) {
-            res.status(500).send(error.message);
+    // Register route
+    app.post('/auth/register', async (req, res) => {
+        const { username, password } = req.body;
+        if (!username || !password) {
+            res.status(400).json({ message: "Username and password are required." });
+            return;
         }
-    });
-
-    app.post('/auth/exchange', async (req, res) => {
-        const code = req.body?.code;
-
-        if (!code) {
-            res.status(400).json({ message: "Missing authorization code." });
+        if (username.length < 3 || password.length < 6) {
+            res.status(400).json({ message: "Username must be at least 3 characters and password at least 6 characters." });
             return;
         }
 
         try {
-            const { clientId, clientSecret } = getAuthCredentials();
-            const tokenResponse = await fetch(TOKEN_URL, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    clientId,
-                    clientSecret,
-                    code,
-                    redirectUri: getRedirectUri(req)
-                })
-            });
-            const tokenData = await tokenResponse.json();
-
-            if (!tokenResponse.ok || !tokenData?.data?.accessToken) {
-                throw new Error(tokenData?.message || "Unable to complete authentication.");
+            const normalizedUsername = username.trim().toLowerCase();
+            // Check if user already exists
+            const exists = await publisher.exists(`user:${normalizedUsername}`);
+            if (exists) {
+                res.status(409).json({ message: "Username is already taken." });
+                return;
             }
 
+            // Save user in Redis
+            const hashedPassword = hashPassword(password);
+            await publisher.hset(`user:${normalizedUsername}`, {
+                username: normalizedUsername,
+                password: hashedPassword,
+                createdAt: Date.now()
+            });
+
+            res.status(201).json({ message: "Registration successful." });
+        } catch (error) {
+            res.status(500).json({ message: error.message || "Registration failed." });
+        }
+    });
+
+    // Login route
+    app.post('/auth/login', async (req, res) => {
+        const { username, password } = req.body;
+        if (!username || !password) {
+            res.status(400).json({ message: "Username and password are required." });
+            return;
+        }
+
+        try {
+            const normalizedUsername = username.trim().toLowerCase();
+            const user = await publisher.hgetall(`user:${normalizedUsername}`);
+            if (!user || !user.password) {
+                res.status(401).json({ message: "Invalid username or password." });
+                return;
+            }
+
+            const isValid = verifyPassword(password, user.password);
+            if (!isValid) {
+                res.status(401).json({ message: "Invalid username or password." });
+                return;
+            }
+
+            // Issue access token (expires in 15 minutes) and refresh token (expires in 7 days)
+            const accessToken = jwt.sign(
+                { id: normalizedUsername, name: username.trim() },
+                JWT_SECRET,
+                { expiresIn: '15m' }
+            );
+
+            const refreshToken = crypto.randomBytes(32).toString('hex');
+            // Store refresh token in Redis (7 days TTL: 604800 seconds)
+            await publisher.set(`refresh_token:${refreshToken}`, username.trim(), 'EX', 7 * 24 * 60 * 60);
+
             res.json({
-                accessToken: tokenData.data.accessToken
+                accessToken,
+                refreshToken
             });
         } catch (error) {
-            res.status(500).json({
-                message: error.message || "Authentication failed."
-            });
+            res.status(500).json({ message: error.message || "Login failed." });
         }
+    });
+
+    // Refresh token route
+    app.post('/auth/refresh', async (req, res) => {
+        const { refreshToken } = req.body;
+        if (!refreshToken) {
+            res.status(400).json({ message: "Refresh token is required." });
+            return;
+        }
+
+        try {
+            const originalUsername = await publisher.get(`refresh_token:${refreshToken}`);
+            if (!originalUsername) {
+                res.status(401).json({ message: "Invalid or expired refresh token." });
+                return;
+            }
+
+            // Delete old refresh token (rotation)
+            await publisher.del(`refresh_token:${refreshToken}`);
+
+            // Issue new tokens
+            const normalizedUsername = originalUsername.trim().toLowerCase();
+            const newAccessToken = jwt.sign(
+                { id: normalizedUsername, name: originalUsername },
+                JWT_SECRET,
+                { expiresIn: '15m' }
+            );
+
+            const newRefreshToken = crypto.randomBytes(32).toString('hex');
+            await publisher.set(`refresh_token:${newRefreshToken}`, originalUsername, 'EX', 7 * 24 * 60 * 60);
+
+            res.json({
+                accessToken: newAccessToken,
+                refreshToken: newRefreshToken
+            });
+        } catch (error) {
+            res.status(500).json({ message: error.message || "Refresh failed." });
+        }
+    });
+
+    // Logout route
+    app.post('/auth/logout', async (req, res) => {
+        const { refreshToken } = req.body;
+        if (refreshToken) {
+            try {
+                await publisher.del(`refresh_token:${refreshToken}`);
+            } catch (error) {
+                console.error("Error deleting refresh token during logout:", error);
+            }
+        }
+        res.json({ message: "Logged out successfully." });
     });
 
     app.get('/', (req, res) => {
@@ -223,10 +257,6 @@ async function main() {
 
     app.get("/home", (req, res) => {
         res.sendFile(path.resolve('./public/index.html'))
-    });
-
-    app.get('/auth', async (req, res) => {
-        res.sendFile(path.resolve('./public/auth.html'))
     });
     server.listen(PORT, () => {
         console.log(`server is running on http://localhost:${PORT}`);

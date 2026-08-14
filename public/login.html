@@ -4,141 +4,450 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
+    <title>One Million Checkboxes - Auth</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #f7f4ec;
-            --surface: rgba(255, 253, 248, 0.92);
-            --ink: #1f1d1a;
-            --muted: #7b4b33;
+            --bg: #0c0b0a;
+            --surface: rgba(28, 26, 23, 0.7);
+            --ink: #f7f5f0;
+            --muted: #a69890;
             --accent: #d96c3d;
-            --line: rgba(31, 29, 26, 0.08);
-            --shadow: 0 20px 40px rgba(59, 45, 29, 0.12);
+            --accent-hover: #eb7c4d;
+            --line: rgba(247, 245, 240, 0.08);
+            --shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+            --glow: rgba(217, 108, 61, 0.2);
         }
 
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
-            margin: 0;
             min-height: 100vh;
             display: grid;
             place-items: center;
-            padding: 24px;
             color: var(--ink);
-            font-family: "Segoe UI", sans-serif;
-            background:
-                radial-gradient(circle at top, rgba(217, 108, 61, 0.18), transparent 32%),
-                linear-gradient(180deg, #f8f4eb 0%, #f2ede2 100%);
+            font-family: "Space Grotesk", sans-serif;
+            background: 
+                radial-gradient(circle at top right, rgba(217, 108, 61, 0.15), transparent 45%),
+                radial-gradient(circle at bottom left, rgba(217, 108, 61, 0.08), transparent 45%),
+                #0c0b0a;
+            padding: 24px;
+            overflow-x: hidden;
         }
 
-        .panel {
-            width: min(420px, 100%);
-            padding: 32px 28px;
-            border-radius: 24px;
-            border: 1px solid var(--line);
+        /* Ambient background animation */
+        .ambient-glow {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: var(--accent);
+            filter: blur(150px);
+            opacity: 0.12;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+            animation: float 10s ease-in-out infinite alternate;
+        }
+
+        @keyframes float {
+            0% { transform: translate(-30px, -30px); }
+            100% { transform: translate(30px, 30px); }
+        }
+
+        /* Main Panel container */
+        .auth-container {
+            position: relative;
+            z-index: 1;
+            width: min(440px, 100%);
+            border-radius: 28px;
             background: var(--surface);
+            border: 1px solid var(--line);
             box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 40px 36px;
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+        }
+
+        .auth-container:hover {
+            box-shadow: var(--shadow), 0 0 30px var(--glow);
+        }
+
+        /* Initializing / Loading state overlay */
+        .initial-loader {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             text-align: center;
-            backdrop-filter: blur(10px);
+            min-height: 280px;
+        }
+
+        .loader-dots {
+            display: inline-flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .loader-dots span {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: bounce 0.6s infinite alternate;
+        }
+
+        .loader-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loader-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            to { transform: translateY(-12px); opacity: 0.4; }
+        }
+
+        /* Form states */
+        .form-section {
+            display: none;
+        }
+
+        .form-section.active {
+            display: block;
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         h1 {
-            margin: 0 0 10px;
-            font-size: clamp(2rem, 5vw, 2.8rem);
-            letter-spacing: -0.04em;
+            font-family: "DM Serif Display", serif;
+            font-size: clamp(2.2rem, 5vw, 2.6rem);
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+            margin-bottom: 12px;
+            text-align: center;
         }
 
-        p {
-            margin: 0;
+        .subtitle {
             color: var(--muted);
-            font-size: 0.98rem;
+            font-size: 0.95rem;
+            text-align: center;
+            margin-bottom: 32px;
         }
 
-        .loader {
-            display: inline-flex;
-            gap: 10px;
-            margin: 24px 0 18px;
-            align-items: flex-end;
-            height: 42px;
+        /* Fields styling */
+        .field-group {
+            margin-bottom: 22px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
-        .loader span {
-            width: 12px;
-            height: 16px;
-            border-radius: 999px;
-            background: linear-gradient(180deg, #ef9b76 0%, var(--accent) 100%);
-            animation: rise 0.8s ease-in-out infinite;
-            transform-origin: bottom;
+        label {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--muted);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
         }
 
-        .loader span:nth-child(2) {
-            animation-delay: 0.12s;
+        input {
+            width: 100%;
+            background: rgba(247, 245, 240, 0.04);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px 16px;
+            font-family: inherit;
+            color: inherit;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.2s ease;
         }
 
-        .loader span:nth-child(3) {
-            animation-delay: 0.24s;
+        input:focus {
+            background: rgba(247, 245, 240, 0.08);
+            border-color: var(--accent);
+            box-shadow: 0 0 12px rgba(217, 108, 61, 0.25);
         }
 
-        @keyframes rise {
-            0%,
-            100% {
-                transform: scaleY(0.45);
-                opacity: 0.45;
-            }
+        /* Action Buttons */
+        .btn {
+            width: 100%;
+            background: var(--accent);
+            border: none;
+            color: #fff;
+            padding: 16px;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 700;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(217, 108, 61, 0.2);
+            margin-top: 10px;
+        }
 
-            50% {
-                transform: scaleY(1.2);
-                opacity: 1;
-            }
+        .btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(217, 108, 61, 0.35);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        /* Status and toggles */
+        .alert {
+            font-size: 0.9rem;
+            text-align: center;
+            margin-top: 16px;
+            padding: 10px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .alert.error {
+            display: block;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            color: #fca5a5;
+        }
+
+        .alert.success {
+            display: block;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            color: #a7f3d0;
+        }
+
+        .toggle-text {
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--muted);
+            margin-top: 24px;
+        }
+
+        .toggle-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 700;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+
+        .toggle-link:hover {
+            color: var(--accent-hover);
         }
     </style>
 </head>
 
 <body>
-    <main class="panel">
-        <h1>Signing You In</h1>
-        <div class="loader" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
+    <div class="ambient-glow"></div>
+
+    <main class="auth-container">
+        <!-- Loader during session lookup -->
+        <div id="session-loader" class="initial-loader">
+            <div class="loader-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <p id="loader-status">Securing connection...</p>
         </div>
-        <p id="status">Checking your session and preparing login...</p>
+
+        <!-- Login Form Section -->
+        <section id="login-section" class="form-section">
+            <h1>Welcome Back</h1>
+            <p class="subtitle">Access the collaborative checkbox grid</p>
+            <form id="login-form">
+                <div class="field-group">
+                    <label for="login-username">Username</label>
+                    <input type="text" id="login-username" required autocomplete="username" minlength="3">
+                </div>
+                <div class="field-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" required autocomplete="current-password" minlength="6">
+                </div>
+                <button type="submit" class="btn">Sign In</button>
+                <div id="login-alert" class="alert"></div>
+                <p class="toggle-text">
+                    Don't have an account? <span class="toggle-link" onclick="toggleForm('register')">Create one</span>
+                </p>
+            </form>
+        </section>
+
+        <!-- Register Form Section -->
+        <section id="register-section" class="form-section">
+            <h1>Create Account</h1>
+            <p class="subtitle">Join the checkbox grid today</p>
+            <form id="register-form">
+                <div class="field-group">
+                    <label for="register-username">Username</label>
+                    <input type="text" id="register-username" required autocomplete="username" minlength="3">
+                </div>
+                <div class="field-group">
+                    <label for="register-password">Password</label>
+                    <input type="password" id="register-password" required autocomplete="new-password" minlength="6">
+                </div>
+                <button type="submit" class="btn">Register</button>
+                <div id="register-alert" class="alert"></div>
+                <p class="toggle-text">
+                    Already have an account? <span class="toggle-link" onclick="toggleForm('login')">Sign in</span>
+                </p>
+            </form>
+        </section>
     </main>
-</body>
-<script>
-    (() => {
-        const status = document.getElementById("status");
-        const accessToken = localStorage.getItem("accessToken");
+
+    <script>
+        const loader = document.getElementById("session-loader");
+        const loaderStatus = document.getElementById("loader-status");
+        const loginSection = document.getElementById("login-section");
+        const registerSection = document.getElementById("register-section");
 
         function isTokenExpired(token) {
-            if (!token) {
-                return true;
-            }
-
+            if (!token) return true;
             try {
                 const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-                return !payload.exp || payload.exp * 1000 <= Date.now();
+                // Add 10 seconds buffer to be safe
+                return !payload.exp || (payload.exp * 1000) <= (Date.now() + 10000);
             } catch {
                 return true;
             }
         }
 
-        if (accessToken && isTokenExpired(accessToken)) {
-            localStorage.clear();
-            status.textContent = "Your session expired. Redirecting...";
-            window.location.replace("/");
-            return;
+        function toggleForm(type) {
+            // Clear any alerts
+            document.getElementById("login-alert").className = "alert";
+            document.getElementById("register-alert").className = "alert";
+
+            if (type === "register") {
+                loginSection.classList.remove("active");
+                registerSection.classList.add("active");
+            } else {
+                registerSection.classList.remove("active");
+                loginSection.classList.add("active");
+            }
         }
 
-        if (accessToken) {
-            window.location.href = "/home";
+        async function trySessionInitialization() {
+            const accessToken = localStorage.getItem("accessToken");
+            const refreshToken = localStorage.getItem("refreshToken");
+
+            if (accessToken && !isTokenExpired(accessToken)) {
+                loaderStatus.textContent = "Session valid. Redirecting...";
+                window.location.href = "/home";
+                return;
+            }
+
+            if (refreshToken) {
+                loaderStatus.textContent = "Resuming session...";
+                try {
+                    const response = await fetch("/auth/refresh", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ refreshToken })
+                    });
+                    const data = await response.json();
+
+                    if (response.ok && data.accessToken && data.refreshToken) {
+                        localStorage.setItem("accessToken", data.accessToken);
+                        localStorage.setItem("refreshToken", data.refreshToken);
+                        loaderStatus.textContent = "Session restored. Redirecting...";
+                        window.location.href = "/home";
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Token refresh failed:", e);
+                }
+            }
+
+            // If we got here, session is invalid or doesn't exist
+            localStorage.clear();
+            loader.style.display = "none";
+            loginSection.classList.add("active");
         }
-        else {
-            window.location.href = "/login";
-        }
-    })();
-</script>
+
+        // Handle Login Submission
+        document.getElementById("login-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const alertBox = document.getElementById("login-alert");
+            alertBox.className = "alert";
+
+            const username = document.getElementById("login-username").value;
+            const password = document.getElementById("login-password").value;
+
+            try {
+                const response = await fetch("/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || "Failed to log in.");
+                }
+
+                localStorage.setItem("accessToken", data.accessToken);
+                localStorage.setItem("refreshToken", data.refreshToken);
+                
+                alertBox.className = "alert success";
+                alertBox.textContent = "Sign in successful! Redirecting...";
+                
+                setTimeout(() => {
+                    window.location.href = "/home";
+                }, 800);
+            } catch (err) {
+                alertBox.className = "alert error";
+                alertBox.textContent = err.message;
+            }
+        });
+
+        // Handle Registration Submission
+        document.getElementById("register-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const alertBox = document.getElementById("register-alert");
+            alertBox.className = "alert";
+
+            const username = document.getElementById("register-username").value;
+            const password = document.getElementById("register-password").value;
+
+            try {
+                const response = await fetch("/auth/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || "Failed to create account.");
+                }
+
+                alertBox.className = "alert success";
+                alertBox.textContent = "Account created successfully! Switching to Login...";
+                
+                setTimeout(() => {
+                    toggleForm("login");
+                    document.getElementById("login-username").value = username;
+                    document.getElementById("login-password").value = password;
+                }, 1500);
+            } catch (err) {
+                alertBox.className = "alert error";
+                alertBox.textContent = err.message;
+            }
+        });
+
+        // Kickoff
+        trySessionInitialization();
+    </script>
+</body>
 
 </html>

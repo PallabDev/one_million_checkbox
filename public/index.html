@@ -140,12 +140,49 @@
             opacity: 1;
             transform: translateX(-50%) translateY(0);
         }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            gap: 16px;
+        }
+
+        .header-container h1 {
+            margin: 0;
+            text-align: left;
+        }
+
+        .logout-btn {
+            background: rgba(217, 108, 61, 0.08);
+            border: 1px solid rgba(217, 108, 61, 0.16);
+            color: #7b4b33;
+            padding: 10px 20px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 700;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .logout-btn:hover {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(217, 108, 61, 0.25);
+        }
     </style>
 </head>
 
 <body>
     <main class="shell">
-        <h1>Checkboxes</h1>
+        <div class="header-container">
+            <h1>Checkboxes</h1>
+            <button id="logout-btn" class="logout-btn">Sign Out</button>
+        </div>
         <p>500 Socket connection.</p>
         <div id="container">
         </div>
@@ -154,10 +191,64 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const accessToken = localStorage.getItem("accessToken");
-        if (!accessToken) {
-            window.location.href = "/";
+        // Token validation helper
+        function isTokenExpired(token) {
+            if (!token) return true;
+            try {
+                const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+                // Buffer of 1 minute
+                return !payload.exp || (payload.exp * 1000) <= (Date.now() + 60000);
+            } catch {
+                return true;
+            }
         }
+
+        // Get or refresh access token
+        async function ensureValidToken() {
+            let token = localStorage.getItem("accessToken");
+            if (!token || isTokenExpired(token)) {
+                const refreshToken = localStorage.getItem("refreshToken");
+                if (!refreshToken) {
+                    window.location.href = "/";
+                    return null;
+                }
+
+                try {
+                    const response = await fetch("/auth/refresh", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ refreshToken })
+                    });
+                    const data = await response.json();
+                    if (response.ok && data.accessToken && data.refreshToken) {
+                        localStorage.setItem("accessToken", data.accessToken);
+                        localStorage.setItem("refreshToken", data.refreshToken);
+                        return data.accessToken;
+                    } else {
+                        localStorage.clear();
+                        window.location.href = "/";
+                        return null;
+                    }
+                } catch (e) {
+                    console.error("Auto refresh token failed:", e);
+                    return token; // fallback to expired token, backend will reject it
+                }
+            }
+            return token;
+        }
+
+        // Initial connection guard
+        (async () => {
+            const token = await ensureValidToken();
+            if (!token) {
+                window.location.href = "/";
+            }
+        })();
+
+        // Periodically refresh access token every 5 minutes
+        setInterval(async () => {
+            await ensureValidToken();
+        }, 5 * 60 * 1000);
 
         const container = document.getElementById('container');
         const toast = document.getElementById('toast');
@@ -174,37 +265,75 @@
             }, 3000);
         }
 
+        // Render checkboxes
         new Array(CHECKBOX_COUNT).fill(null).forEach((_, index) => {
             const input = document.createElement('input');
             input.id = `checkbox-${index}`;
             input.type = 'checkbox';
-            input.addEventListener('change', (event) => {
+            input.addEventListener('change', async (event) => {
                 let checked = event.target.checked;
-
-                socket.emit("client:checkbox:change", { index, checked, accessToken });
+                const token = await ensureValidToken();
+                if (token) {
+                    socket.emit("client:checkbox:change", { index, checked, accessToken: token });
+                } else {
+                    event.target.checked = !checked; // Revert click if token validation redirects
+                }
             });
             container.appendChild(input);
-        })
-        socket.on("server:checkbox:change", data => {
-            document.querySelector(`#checkbox-${data.index}`).checked = data.checked;
+        });
 
-        })
+        // Socket listeners
+        socket.on("server:checkbox:change", data => {
+            const el = document.querySelector(`#checkbox-${data.index}`);
+            if (el) el.checked = data.checked;
+        });
 
         socket.on("server:checkbox:user", data => {
             showToast(`${data.user} changed a checkbox.`);
-        })
+        });
+
         socket.on("server:checkbox:status", data => {
             data.forEach((_, index) => {
-                document.querySelector(`#checkbox-${index}`).checked = data[index];
-            })
-        })
+                const el = document.querySelector(`#checkbox-${index}`);
+                if (el) el.checked = data[index];
+            });
+        });
 
-        socket.on("server:error", error => {
-            let checkbox = document.querySelector(`#checkbox-${error.data.index}`)
-            checkbox.checked = !error.data.checked;
+        socket.on("server:error", async error => {
+            const checkbox = document.querySelector(`#checkbox-${error.data.index}`);
+            if (checkbox) {
+                checkbox.checked = !error.data.checked;
+            }
+            
+            // Check if error is due to expired access token
+            if (error.message && (error.message.includes("jwt expired") || error.message.includes("token") || error.message.includes("access token"))) {
+                const token = await ensureValidToken();
+                if (token) {
+                    showToast("Session refreshed. Please try again.");
+                    return;
+                }
+            }
+            
             showToast(error.message || "Something went wrong. Please try again.");
         });
 
+        // Sign Out action
+        document.getElementById("logout-btn").addEventListener("click", async () => {
+            const refreshToken = localStorage.getItem("refreshToken");
+            if (refreshToken) {
+                try {
+                    await fetch("/auth/logout", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ refreshToken })
+                    });
+                } catch (e) {
+                    console.error("Logout request failed:", e);
+                }
+            }
+            localStorage.clear();
+            window.location.href = "/";
+        });
     </script>
 </body>
 
